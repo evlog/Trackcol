@@ -189,7 +189,8 @@ void loop() {
   Serial.print("/");
   Serial.println(pitchF);
 
-  
+  float mag = sqrt( X*X + Y*Y + Z*Z ); 
+  Serial.println(mag);
   /*Take a one second break*/
   delay(1000);
 }
