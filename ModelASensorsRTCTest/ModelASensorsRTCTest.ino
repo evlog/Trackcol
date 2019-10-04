@@ -12,6 +12,11 @@
 #include <SparkFun_ADXL345.h>         // SparkFun ADXL345 Library
 #include "FS.h"                       // File system library
 #include "SPIFFS.h"                   // File system library
+#include "BluetoothSerial.h"          // Bluetooth library
+
+#if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
+#error Bluetooth is not enabled! Please run `make menuconfig` to and enable it
+#endif
 //-----------------------------
 //-----------------------------
 
@@ -19,13 +24,16 @@
 //-----------------------------
 #define FORMAT_SPIFFS_IF_FAILED true
 #define uS_TO_S_FACTOR 1000000  /* Conversion factor for micro seconds to seconds */
-#define TIME_TO_SLEEP  5        /* Time ESP32 will go to sleep (in seconds) */
+#define TIME_TO_SLEEP  10        /* Time ESP32 will go to sleep (in seconds) */
 
-ADXL345 adxl = ADXL345();             // USE FOR I2C COMMUNICATION
-int ADXL345_INTERRUPT_PIN = 4;                 // Setup pin 2 to be the interrupt pin (for most Arduino Boards)
-
+int ADXL345_INTERRUPT_PIN = 4;        
 RTC_DATA_ATTR int bootCount = 0;
 
+BluetoothSerial SerialBT;
+ADXL345 adxl = ADXL345();             // USE FOR I2C COMMUNICATION
+
+// Time value to be used for delay
+unsigned long measPreviousMillis = 0;
 //-----------------------------
 
 //Auxiliary Functions
@@ -135,17 +143,20 @@ float calculatePitchAngle (int xAccel, int yAccel, int zAccel) {
 }
 
 // List files in a directory
-void listDir(fs::FS &fs, const char * dirname, uint8_t levels){
+uint8_t listDir(fs::FS &fs, const char * dirname, uint8_t levels){
+
+    uint8_t flag;
+    
     Serial.printf("Listing directory: %s\r\n", dirname);
 
     File root = fs.open(dirname);
     if(!root){
         Serial.println("- failed to open directory");
-        return;
+        return 2;
     }
     if(!root.isDirectory()){
         Serial.println(" - not a directory");
-        return;
+        return 2;
     }
 
     File file = root.openNextFile();
@@ -162,12 +173,15 @@ void listDir(fs::FS &fs, const char * dirname, uint8_t levels){
             Serial.print("\tSIZE: ");
             Serial.println(file.size());
         }
-        if (String(file.name()).indexOf("hello.txt") != -1)
-          Serial.println("File exists");
-        else
-          Serial.println("File does not exist");
+        if (String(file.name()).indexOf("log.txt") != -1) {
+          flag = 1;
+        }
+        else {
+          flag = 0;
+        }
         file = root.openNextFile();
     }
+    return flag;
 }
 
 // Open and read a file
@@ -238,14 +252,52 @@ void deleteFile(fs::FS &fs, const char * path){
     }
 }
 
+// Write angle measurements to log file
+void writeAngleToFile(float rollAngle, float pitchAngle) {
+  char measChar[8];
+  
+  dtostrf(rollAngle, 3, 2, measChar);
+  appendFile(SPIFFS, "/log.txt", measChar);
+  appendFile(SPIFFS, "/log.txt", ", ");
+  dtostrf(pitchAngle, 3, 2, measChar);
+  appendFile(SPIFFS, "/log.txt", measChar);
+  appendFile(SPIFFS, "/log.txt", "\r\n");
+}
+
+void readBtCommand() {
+
+  String btMessage = "";
+  
+  while(SerialBT.available()) {
+    char incomingChar = SerialBT.read();
+    if (incomingChar!= '\n'){
+      btMessage += String(incomingChar);
+    }
+    else {
+      Serial.println(btMessage);
+      parseBtCommand(btMessage);     
+      btMessage = "";
+    }
+  }  
+}
+
+void parseBtCommand(String btMessage) {
+  if (btMessage.indexOf("hi there") != -1)
+    Serial.println("Command received");
+}
+
 
 //-----------------------------
 //-----------------------------
 
 void setup() {
+
+  uint8_t filExistsFlag;
+  
   // put your setup code here, to run once:
   Serial.begin(9600);                 // Start the serial terminal
-  Serial.println("SparkFun ADXL345 Accelerometer Hook Up Guide Example");
+  SerialBT.begin("ESP32test");        //Bluetooth device name
+  Serial.println("BlueTooth communication started.");
   Serial.println();
 
   // File system initialization
@@ -260,50 +312,69 @@ void setup() {
   // Set our ESP32 to wake up every TIME_TO_SLEEP * uS_TO_S_FACTOR seconds
   esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
 
-  listDir(SPIFFS, "/", 0);
+  // Check if log.txt exists and if not create it
+  // ---
+  filExistsFlag = listDir(SPIFFS, "/", 0);
 
-  readFile(SPIFFS, "/hello.txt");
-
+  if (filExistsFlag == 1) {
+    readFile(SPIFFS, "/log.txt");
+    Serial.println("Log file exists.");
+  }
+  else if (filExistsFlag == 0) {
+    writeFile(SPIFFS, "/log.txt", "");
+    Serial.println("Log file created.");
+  }
+  // ---
+  // ---
+    
   Serial.println( "Test complete" );
 }
 
 void loop() {
   // put your main code here, to run repeatedly:
   int xAccel, yAccel, zAccel;
-  char measChar[8];
   float pitchAngle, rollAngle;
+  // Time value to be used for delay 
+  unsigned long currentMillis = 0;
+
  
    //Increment boot number and print it every reboot
-  ++bootCount;
-  Serial.println("Boot number: " + String(bootCount));
+  //++bootCount;
+  //Serial.println("Boot number: " + String(bootCount));
+
+  currentMillis = millis();
+  if ((currentMillis - measPreviousMillis) >= 10000) {
+    // Read from ADXL345 accelerometer
+    adxl.readAccel(&xAccel, &yAccel, &zAccel);
+
+    // Calculate roll angle
+    rollAngle = calculateRollAngle(xAccel, yAccel, zAccel);  
+    Serial.print(rollAngle);
+    Serial.print("/");
   
-  // Read from ADXL345 accelerometer
-  adxl.readAccel(&xAccel, &yAccel, &zAccel);
+    // Calculate pitch angle
+    pitchAngle = calculatePitchAngle(xAccel, yAccel, zAccel);  
+    Serial.println(pitchAngle);
 
-  // Calculate roll angle
-  rollAngle = calculateRollAngle(xAccel, yAccel, zAccel);
-  Serial.print(rollAngle);
-  Serial.print("/");
+    Serial.println(zAccel);
+
+    adxlIsr();
+
+    // Write measurements to file
+    writeAngleToFile(rollAngle, pitchAngle);  
+
+    measPreviousMillis = currentMillis;
+  }
   
-  // Calculate pitch angle
-  pitchAngle = calculatePitchAngle(xAccel, yAccel, zAccel);  
-  Serial.println(pitchAngle);
+  //Serial.println("Going to sleep now");
+  //Serial.flush(); 
 
-  Serial.println(zAccel);
+  if (SerialBT.available())
+    readBtCommand();
 
-  adxlIsr();
+  
 
-  // Write measurements to file
-  dtostrf(rollAngle, 3, 2, measChar);
-  appendFile(SPIFFS, "/hello.txt", measChar);
-  appendFile(SPIFFS, "/hello.txt", ", ");
-  dtostrf(pitchAngle, 3, 2, measChar);
-  appendFile(SPIFFS, "/hello.txt", measChar);
-  appendFile(SPIFFS, "/hello.txt", "\r\n");
-
-  Serial.println("Going to sleep now");
-  delay(3000);
-  Serial.flush(); 
-  esp_deep_sleep_start();
+  //delay(10000);
+  //esp_deep_sleep_start();
 
 }
