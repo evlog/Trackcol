@@ -26,7 +26,10 @@
 #define uS_TO_S_FACTOR 1000000  /* Conversion factor for micro seconds to seconds */
 #define TIME_TO_SLEEP  10        /* Time ESP32 will go to sleep (in seconds) */
 
-int ADXL345_INTERRUPT_PIN = 4;        
+boolean ST_DATA_MEAS = false;
+
+int ADXL345_INTERRUPT_PIN = 4;   
+int PUSH_BUTTON_INTERRUPT_PIN = 0;        
 RTC_DATA_ATTR int bootCount = 0;
 
 BluetoothSerial SerialBT;
@@ -74,6 +77,30 @@ void adxlIsr() {
     Serial.println("*** TAP ***");
      //add code here to do when a tap is sensed
   } 
+}
+
+// Interrupt service routine to detect push button changes
+void pushButtonIsr () {
+  static unsigned long last_interrupt_time = 0;
+  unsigned long interrupt_time = millis();
+  
+  // If interrupts come faster than 200ms, assume it's a bounce and ignore
+  if (interrupt_time - last_interrupt_time > 200)
+  {
+    Serial.println("Button pushed");
+    ST_DATA_MEAS = !ST_DATA_MEAS;
+    Serial.print("ST_DATA_MEAS: ");
+    Serial.println(ST_DATA_MEAS);
+  }
+  last_interrupt_time = interrupt_time;  
+
+}
+
+void callback(esp_spp_cb_event_t event, esp_spp_cb_param_t *param){
+  if(event == ESP_SPP_SRV_OPEN_EVT){
+    Serial.println("Client Connected");
+    //SerialBT.write("Trackcol A device. Ready to receive commands...");
+  }
 }
 
 // Configure ADXL345 sensor
@@ -200,6 +227,21 @@ void readFile(fs::FS &fs, const char * path){
     }
 }
 
+void readFileBT(fs::FS &fs, const char * path){
+    SerialBT.printf("Reading file: %s\r\n", path);
+
+    File file = fs.open(path);
+    if(!file || file.isDirectory()){
+        SerialBT.println("- failed to open file for reading");
+        return;
+    }
+
+    SerialBT.println("- read from file:");
+    while(file.available()){
+        SerialBT.write(file.read());
+    }
+}
+
 // Open and write to file
 void writeFile(fs::FS &fs, const char * path, const char * message){
     Serial.printf("Writing file: %s\r\n", path);
@@ -282,8 +324,50 @@ void readBtCommand() {
 }
 
 void parseBtCommand(String btMessage) {
-  if (btMessage.indexOf("hi there") != -1)
-    Serial.println("Command received");
+  uint8_t filExistsFlag;
+  
+  if (btMessage.indexOf("COMM_DELETE_LOG") >= 0) {
+    Serial.println("*****");
+    SerialBT.println("*****");
+    Serial.println("COMM_DELETE_LOG");
+    SerialBT.println("COMM_DELETE_LOG");
+    deleteFile(SPIFFS, "/log.txt");
+    SerialBT.println("COMM_DELETE_LOG: OK");
+    Serial.println("*****");
+    SerialBT.println("*****");
+    Serial.println("*****");
+    SerialBT.println("*****");
+  }
+
+  else if (btMessage.indexOf("COMM_GET_LOG") >= 0) {
+    Serial.println("*****");
+    SerialBT.println("*****");
+    Serial.println("COMM_GET_LOG");
+    SerialBT.println("COMM_GET_LOG");
+    filExistsFlag = listDir(SPIFFS, "/", 0);
+
+    // Check if log.txt exists and if not create it
+    // ---
+    if (filExistsFlag == 1) {
+      Serial.println("Log file exists.");
+      SerialBT.println("Log file exists.");
+      readFile(SPIFFS, "/log.txt"); 
+      readFileBT(SPIFFS, "/log.txt");  
+    }
+    else if (filExistsFlag == 0) {
+      writeFile(SPIFFS, "/log.txt", "");
+      Serial.println("Log file created.");
+      SerialBT.println("Log file created.");
+    }
+    // ---
+    // ---
+    Serial.println("COMM_GET_LOG: OK");
+    SerialBT.println("COMM_GET_LOG: OK");
+    Serial.println("*****");
+    SerialBT.println("*****");
+    Serial.println("*****");
+    SerialBT.println("*****");
+  }
 }
 
 
@@ -297,6 +381,7 @@ void setup() {
   // put your setup code here, to run once:
   Serial.begin(9600);                 // Start the serial terminal
   SerialBT.begin("ESP32test");        //Bluetooth device name
+  //SerialBT.register_callback(callback);
   Serial.println("BlueTooth communication started.");
   Serial.println();
 
@@ -305,6 +390,10 @@ void setup() {
     Serial.println("SPIFFS Mount Failed");
     return;
   }
+
+  // Set pushbutton interrupt
+  pinMode(PUSH_BUTTON_INTERRUPT_PIN, INPUT_PULLUP);
+  attachInterrupt(digitalPinToInterrupt(PUSH_BUTTON_INTERRUPT_PIN), pushButtonIsr, FALLING);   // Attach Interrupt 
    
   // Initialize the ADXL345 sensor 
   adxl345Config();
@@ -317,7 +406,6 @@ void setup() {
   filExistsFlag = listDir(SPIFFS, "/", 0);
 
   if (filExistsFlag == 1) {
-    readFile(SPIFFS, "/log.txt");
     Serial.println("Log file exists.");
   }
   else if (filExistsFlag == 0) {
@@ -328,6 +416,25 @@ void setup() {
   // ---
     
   Serial.println( "Test complete" );
+
+  
+  while(1) {
+    if(ST_DATA_MEAS == true)
+      break;
+    if (SerialBT.hasClient() == true) {
+      Serial.println( "BT client connected");
+      SerialBT.println("Trackcol A device. Ready to receive commands...");
+      break;
+    }
+  }
+    
+  while(1) {
+    if(ST_DATA_MEAS == true)
+      break;
+    if (SerialBT.available())
+      readBtCommand();
+  }
+  
 }
 
 void loop() {
