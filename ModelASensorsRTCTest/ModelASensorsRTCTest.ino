@@ -10,6 +10,7 @@
 // Define libraries
 //-----------------------------
 #include <SparkFun_ADXL345.h>         // SparkFun ADXL345 Library
+#include <ADXL345.h>         // SparkFun ADXL345 Library
 #include "FS.h"                       // File system library
 #include "SPIFFS.h"                   // File system library
 #include "BluetoothSerial.h"          // Bluetooth library
@@ -29,6 +30,7 @@
 boolean ST_DATA_MEAS = false;
 
 int ADXL345_INTERRUPT_PIN = 4;   
+int LED_STATUS_PIN = 23;   
 int PUSH_BUTTON_INTERRUPT_PIN = 0;        
 RTC_DATA_ATTR int bootCount = 0;
 
@@ -37,6 +39,8 @@ ADXL345 adxl = ADXL345();             // USE FOR I2C COMMUNICATION
 
 // Time value to be used for delay
 unsigned long measPreviousMillis = 0;
+unsigned long statusLedPreviousMillis = 0;
+
 //-----------------------------
 
 //Auxiliary Functions
@@ -69,7 +73,7 @@ void adxlIsr() {
   // Double Tap Detection
   if(adxl.triggered(interrupts, ADXL345_DOUBLE_TAP)){
     Serial.println("*** DOUBLE TAP ***");
-     //add code here to do when a 2X tap is sensed
+     //add code here to do when a 2X tap is sensed 
   }
   
   // Tap Detection
@@ -91,12 +95,19 @@ void pushButtonIsr () {
     ST_DATA_MEAS = !ST_DATA_MEAS;
     Serial.print("ST_DATA_MEAS: ");
     Serial.println(ST_DATA_MEAS);
+
+  //  if (ST_DATA_MEAS ==  true) {
+  //    delay(1000);
+  //    last_interrupt_time = interrupt_time;
+   //   loop();
+    //}
+
   }
   last_interrupt_time = interrupt_time;  
 
 }
 
-void callback(esp_spp_cb_event_t event, esp_spp_cb_param_t *param){
+ void callback(esp_spp_cb_event_t event, esp_spp_cb_param_t *param){
   if(event == ESP_SPP_SRV_OPEN_EVT){
     Serial.println("Client Connected");
     //SerialBT.write("Trackcol A device. Ready to receive commands...");
@@ -148,7 +159,8 @@ void adxl345Config() {
   adxl.singleTapINT(1);
 
   pinMode(ADXL345_INTERRUPT_PIN, OUTPUT);
-  attachInterrupt(ADXL345_INTERRUPT_PIN, adxlIsr, RISING);   // Attach Interrupt  
+  attachInterrupt(digitalPinToInterrupt(ADXL345_INTERRUPT_PIN), adxlIsr, FALLING);   // Attach Interrupt  
+
 }
 
 // Calculate roll angle
@@ -371,10 +383,32 @@ void parseBtCommand(String btMessage) {
 }
 
 
+void btInit() {
+  digitalWrite(LED_STATUS_PIN, HIGH);
+  while(1) {
+    if(ST_DATA_MEAS == true)
+      break;
+
+    if (SerialBT.hasClient() == true) {
+      Serial.println( "BT client connected");
+      SerialBT.println("Trackcol A device. Ready to receive commands...");
+      break;
+    }
+  }
+    
+  while(1) {
+    if(ST_DATA_MEAS == true)
+      break;
+    if (SerialBT.available())
+      readBtCommand();
+  }
+}
+
 //-----------------------------
 //-----------------------------
 
 void setup() {
+
 
   uint8_t filExistsFlag;
   
@@ -390,6 +424,9 @@ void setup() {
     Serial.println("SPIFFS Mount Failed");
     return;
   }
+
+  pinMode(LED_STATUS_PIN, OUTPUT); 
+  
 
   // Set pushbutton interrupt
   pinMode(PUSH_BUTTON_INTERRUPT_PIN, INPUT_PULLUP);
@@ -417,71 +454,77 @@ void setup() {
     
   Serial.println( "Test complete" );
 
-  
-  while(1) {
-    if(ST_DATA_MEAS == true)
-      break;
-    if (SerialBT.hasClient() == true) {
-      Serial.println( "BT client connected");
-      SerialBT.println("Trackcol A device. Ready to receive commands...");
-      break;
-    }
-  }
     
-  while(1) {
-    if(ST_DATA_MEAS == true)
-      break;
-    if (SerialBT.available())
-      readBtCommand();
-  }
+
+
   
 }
 
 void loop() {
-  // put your main code here, to run repeatedly:
-  int xAccel, yAccel, zAccel;
-  float pitchAngle, rollAngle;
-  // Time value to be used for delay 
-  unsigned long currentMillis = 0;
 
- 
-   //Increment boot number and print it every reboot
-  //++bootCount;
-  //Serial.println("Boot number: " + String(bootCount));
-
-  currentMillis = millis();
-  if ((currentMillis - measPreviousMillis) >= 10000) {
-    // Read from ADXL345 accelerometer
-    adxl.readAccel(&xAccel, &yAccel, &zAccel);
-
-    // Calculate roll angle
-    rollAngle = calculateRollAngle(xAccel, yAccel, zAccel);  
-    Serial.print(rollAngle);
-    Serial.print("/");
+  if (ST_DATA_MEAS == true) {
   
-    // Calculate pitch angle
-    pitchAngle = calculatePitchAngle(xAccel, yAccel, zAccel);  
-    Serial.println(pitchAngle);
-
-    Serial.println(zAccel);
-
-    adxlIsr();
-
-    // Write measurements to file
-    writeAngleToFile(rollAngle, pitchAngle);  
-
-    measPreviousMillis = currentMillis;
+    // put your main code here, to run repeatedly:
+    int xAccel, yAccel, zAccel;
+    float pitchAngle, rollAngle;
+    // Time value to be used for delay 
+    unsigned long measCurrentMillis = 0;
+    unsigned long statusLedCurrentMillis = 0;
+  
+    digitalWrite(LED_STATUS_PIN, LOW);
+    
+    statusLedCurrentMillis = millis();
+    if ((statusLedCurrentMillis - statusLedPreviousMillis) >= 3000) {    
+      digitalWrite(LED_STATUS_PIN, HIGH);   
+      delay(50); 
+      digitalWrite(LED_STATUS_PIN, LOW);    
+      statusLedPreviousMillis = statusLedCurrentMillis;
+        
+    }
+   
+     //Increment boot number and print it every reboot
+    //++bootCount;
+    //Serial.println("Boot number: " + String(bootCount));
+  
+    measCurrentMillis = millis();
+    if ((measCurrentMillis - measPreviousMillis) >= 10000) {
+      // Read from ADXL345 accelerometer
+      adxl.readAccel(&xAccel, &yAccel, &zAccel);
+  
+      // Calculate roll angle
+      rollAngle = calculateRollAngle(xAccel, yAccel, zAccel);  
+      Serial.print(rollAngle);
+      Serial.print("/");
+    
+      // Calculate pitch angle
+      pitchAngle = calculatePitchAngle(xAccel, yAccel, zAccel);  
+      Serial.println(pitchAngle);
+  
+      Serial.println(zAccel);
+  
+      adxlIsr();
+  
+      // Write measurements to file
+      writeAngleToFile(rollAngle, pitchAngle);  
+  
+      measPreviousMillis = measCurrentMillis;
+    }
+    
+    //Serial.println("Going to sleep now");
+    //Serial.flush(); 
+  
+  
+    //if (SerialBT.available())
+    //  readBtCommand();
+  
+    
+  
+    //delay(10000);
+    //esp_deep_sleep_start();
   }
+
+  if (ST_DATA_MEAS ==  false) {
+    btInit();
   
-  //Serial.println("Going to sleep now");
-  //Serial.flush(); 
-
-  if (SerialBT.available())
-    readBtCommand();
-
-  
-
-  //delay(10000);
-  //esp_deep_sleep_start();
-
+  }
 }
