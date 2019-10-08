@@ -10,10 +10,11 @@
 // Define libraries
 //-----------------------------
 #include <SparkFun_ADXL345.h>         // SparkFun ADXL345 Library
-#include <ADXL345.h>         // SparkFun ADXL345 Library
+//#include <ADXL345.h>         // SparkFun ADXL345 Library
 #include "FS.h"                       // File system library
 #include "SPIFFS.h"                   // File system library
 #include "BluetoothSerial.h"          // Bluetooth library
+#include <RTClib.h>                   // RTC library
 
 #if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
 #error Bluetooth is not enabled! Please run `make menuconfig` to and enable it
@@ -36,10 +37,16 @@ RTC_DATA_ATTR int bootCount = 0;
 
 BluetoothSerial SerialBT;
 ADXL345 adxl = ADXL345();             // USE FOR I2C COMMUNICATION
+RTC_DS3231 rtc;                       // RTC object
+
+
 
 // Time value to be used for delay
 unsigned long measPreviousMillis = 0;
 unsigned long statusLedPreviousMillis = 0;
+
+// Real time char value
+char t[32];
 
 //-----------------------------
 
@@ -309,10 +316,12 @@ void deleteFile(fs::FS &fs, const char * path){
 // Write angle measurements to log file
 void writeAngleToFile(float rollAngle, float pitchAngle) {
   char measChar[8];
-  
+
+  appendFile(SPIFFS, "/log.txt", t);
+  appendFile(SPIFFS, "/log.txt", ",");
   dtostrf(rollAngle, 3, 2, measChar);
   appendFile(SPIFFS, "/log.txt", measChar);
-  appendFile(SPIFFS, "/log.txt", ", ");
+  appendFile(SPIFFS, "/log.txt", ",");
   dtostrf(pitchAngle, 3, 2, measChar);
   appendFile(SPIFFS, "/log.txt", measChar);
   appendFile(SPIFFS, "/log.txt", "\r\n");
@@ -375,6 +384,89 @@ void parseBtCommand(String btMessage) {
     // ---
     Serial.println("COMM_GET_LOG: OK");
     SerialBT.println("COMM_GET_LOG: OK");
+    Serial.println("*****");
+    SerialBT.println("*****");
+    Serial.println("*****");
+    SerialBT.println("*****");
+  }
+
+  else if (btMessage.indexOf("COMM_SET_TIME_DATE") >= 0) {
+    String timeDate, buf;
+    uint32_t i, year_t, month_t, day_t, hours_t, minutes_t, seconds_t;
+    Serial.println("*****");
+    SerialBT.println("*****");
+    Serial.println("COMM_SET_TIME_DATE");
+    SerialBT.println("COMM_SET_TIME_DATE");
+    
+    timeDate = btMessage.substring(btMessage.indexOf(" "));
+
+    buf = timeDate;
+
+    i = buf.indexOf(',');
+    year_t = buf.substring(0,i).toInt();
+    buf = buf.substring(i+1, buf.length());
+
+    Serial.println(buf);
+
+    i = buf.indexOf(',');
+    month_t = buf.substring(0,i).toInt();
+    buf = buf.substring(i+1, buf.length());
+
+    Serial.println(buf);
+
+    i = buf.indexOf(',');
+    day_t = buf.substring(0,i).toInt();
+    buf = buf.substring(i+1, buf.length());
+
+    Serial.println(buf);
+
+    i = buf.indexOf(',');
+    hours_t = buf.substring(0,i).toInt();
+    buf = buf.substring(i+1, buf.length());
+
+    Serial.println(buf);
+
+    i = buf.indexOf(',');
+    minutes_t = buf.substring(0,i).toInt();
+    buf = buf.substring(i+1, buf.length());
+
+    Serial.println(buf);
+
+    i = buf.indexOf(',');
+    seconds_t = buf.substring(0,i).toInt();
+    buf = buf.substring(i+1, buf.length());
+    
+
+ //   for (int i = 0; i < timeDate.length(); i++) {
+ //     if (timeDate.substring(i, i+1) == ",") {
+ ///       year_t    = timeDate.substring(0, i).toInt();
+ //       month_t   = timeDate.substring(i+1).toInt();
+ //       day_t     = timeDate.substring(i+2).toInt();
+  //      hours_t   = timeDate.substring(i+3).toInt();
+  //      minutes_t = timeDate.substring(i+4).toInt();
+  //      seconds_t = timeDate.substring(i+5).toInt();
+  //      break;
+  //    }
+  //  }
+   
+
+    Serial.println(year_t);
+    SerialBT.println(year_t);
+    Serial.println(month_t);
+    SerialBT.println(month_t);
+    Serial.println(day_t);
+    SerialBT.println(day_t);
+    Serial.println(hours_t);
+    SerialBT.println(hours_t);
+    Serial.println(minutes_t);
+    SerialBT.println(minutes_t);
+    Serial.println(seconds_t);
+    SerialBT.println(seconds_t);
+
+    rtc.adjust(DateTime(year_t, month_t, day_t, hours_t, minutes_t, seconds_t));
+
+    Serial.println("COMM_SET_TIME_DATE: OK");
+    SerialBT.println("COMM_SET_TIME_DATE: OK");
     Serial.println("*****");
     SerialBT.println("*****");
     Serial.println("*****");
@@ -451,6 +543,11 @@ void setup() {
   }
   // ---
   // ---
+
+  // Initialize time
+  rtc.begin();
+  //rtc.adjust(DateTime(F(__DATE__),F(__TIME__)));
+  //rtc.adjust(DateTime(2019, 10, 07, 22, 40, 0));
     
   Serial.println( "Test complete" );
 
@@ -503,10 +600,21 @@ void loop() {
       Serial.println(zAccel);
   
       adxlIsr();
+
+      DateTime now = rtc.now();
+
+      sprintf(t, "%02d-%02d-%02d %02d:%02d:%02d",  now.day(), now.month(), now.year(), now.hour(), now.minute(), now.second());
   
       // Write measurements to file
       writeAngleToFile(rollAngle, pitchAngle);  
+
+      //---
   
+  
+      Serial.print(F("Date/Time: "));
+      Serial.println(t);
+      //---
+      //---
       measPreviousMillis = measCurrentMillis;
     }
     
