@@ -26,17 +26,22 @@
 
 // Define constants and global variables
 //-----------------------------
+const char DEVICE_ID[] = "0";
+const char DEVICE_MODEL[] = "1A";
+const char SW_VERSION[] = "1.0";
 #define FORMAT_SPIFFS_IF_FAILED true
 #define uS_TO_S_FACTOR 1000000  /* Conversion factor for micro seconds to seconds */
 #define TIME_TO_SLEEP  10       /* Time ESP32 will go to sleep (in seconds) */
 #define EEPROM_SIZE 2           // define the number of bytes you want to access
 boolean ST_DATA_MEAS = false;
 boolean flagReadBatteryFlag = false;
+boolean adxlIsrFlag = false;
 int batteryVoltage;
 
 boolean eepromWriteFlag = false;
 
-int ADXL345_INTERRUPT_PIN = 4;   
+int ADXL345_INTERRUPT_PIN = 4;  
+int ADXL345_INTERRUPT_MAN_PIN = 16;    
 int LED_STATUS_PIN = 23;  
 int DHT22_GPIO_PIN = 2;
 int BATTERY_LED_PIN_2 = 19;
@@ -103,12 +108,22 @@ void adxlIsr() {
   } 
 }
 
+void adxlManIsr () {
+  detachInterrupt(digitalPinToInterrupt(PUSH_BUTTON_INTERRUPT_PIN));
+  detachInterrupt(digitalPinToInterrupt(ADXL345_INTERRUPT_MAN_PIN));
+  adxlIsrFlag = true;
+  Serial.println("adxlManIsr");
+  attachInterrupt(digitalPinToInterrupt(PUSH_BUTTON_INTERRUPT_PIN), pushButtonIsr, FALLING);   // Attach Interrupt 
+  attachInterrupt(digitalPinToInterrupt(ADXL345_INTERRUPT_MAN_PIN), adxlManIsr, RISING);
+}
+
 // Interrupt service routine to detect push button changes
 void pushButtonIsr () {
   static unsigned long last_interrupt_time = 0;
   unsigned long interrupt_time = millis();
 
   detachInterrupt(digitalPinToInterrupt(PUSH_BUTTON_INTERRUPT_PIN));
+  detachInterrupt(digitalPinToInterrupt(ADXL345_INTERRUPT_MAN_PIN));
 
   
 
@@ -136,6 +151,7 @@ void pushButtonIsr () {
   eepromWriteFlag = true;
 
   attachInterrupt(digitalPinToInterrupt(PUSH_BUTTON_INTERRUPT_PIN), pushButtonIsr, FALLING);   // Attach Interrupt 
+  attachInterrupt(digitalPinToInterrupt(ADXL345_INTERRUPT_MAN_PIN), adxlManIsr, RISING);
 
 }
 
@@ -183,12 +199,12 @@ void blinkLed (uint32_t blinkDelay) {
   }
 }
 
- void callback(esp_spp_cb_event_t event, esp_spp_cb_param_t *param){
-  if(event == ESP_SPP_SRV_OPEN_EVT){
-    Serial.println("Client Connected");
-    //SerialBT.write("Trackcol A device. Ready to receive commands...");
-  }
-}
+// void callback(esp_spp_cb_event_t event, esp_spp_cb_param_t *param){
+//  if(event == ESP_SPP_SRV_OPEN_EVT){
+//    Serial.println("Client Connected");
+//    //SerialBT.write("Trackcol A device. Ready to receive commands...");
+//  }
+//}
 
 // Configure ADXL345 sensor
 void adxl345Config() {
@@ -203,14 +219,14 @@ void adxl345Config() {
                                       // Default: Set to 1
                                       // SPI pins on the ATMega328: 11, 12 and 13 as reference in SPI Library 
    
-  adxl.setActivityXYZ(0, 0, 0);       // Set to activate movement detection in the axes "adxl.setActivityXYZ(X, Y, Z);" (1 == ON, 0 == OFF)
-  adxl.setActivityThreshold(75);      // 62.5mg per increment   // Set activity   // Inactivity thresholds (0-255)
+  adxl.setActivityXYZ(1, 1, 1);       // Set to activate movement detection in the axes "adxl.setActivityXYZ(X, Y, Z);" (1 == ON, 0 == OFF)
+  adxl.setActivityThreshold(255);      // 62.5mg per increment   // Set activity   // Inactivity thresholds (0-255)
  
   adxl.setInactivityXYZ(0, 0, 0);     // Set to detect inactivity in all the axes "adxl.setInactivityXYZ(X, Y, Z);" (1 == ON, 0 == OFF)
   adxl.setInactivityThreshold(75);    // 62.5mg per increment   // Set inactivity // Inactivity thresholds (0-255)
   adxl.setTimeInactivity(10);         // How many seconds of no activity is inactive?
 
-  adxl.setTapDetectionOnXYZ(1, 1, 1); // Detect taps in the directions turned ON "adxl.setTapDetectionOnX(X, Y, Z);" (1 == ON, 0 == OFF)
+  adxl.setTapDetectionOnXYZ(0, 0, 0); // Detect taps in the directions turned ON "adxl.setTapDetectionOnX(X, Y, Z);" (1 == ON, 0 == OFF)
  
   // Set values for what is considered a TAP and what is a DOUBLE TAP (0-255)
   adxl.setTapThreshold(255);           // 62.5 mg per increment
@@ -219,23 +235,25 @@ void adxl345Config() {
   adxl.setDoubleTapWindow(200);       // 1.25 ms per increment
  
   // Set values for what is considered FREE FALL (0-255)
-  adxl.setFreeFallThreshold(7);       // (5 - 9) recommended - 62.5mg per increment
+  adxl.setFreeFallThreshold(100);       // (5 - 9) recommended - 62.5mg per increment
   adxl.setFreeFallDuration(30);       // (20 - 70) recommended - 5ms per increment
  
   // Setting all interupts to take place on INT1 pin
-  adxl.setImportantInterruptMapping(1, 0, 0, 0, 0);     // Sets "adxl.setEveryInterruptMapping(single tap, double tap, free fall, activity, inactivity);" 
+  adxl.setImportantInterruptMapping(0, 0, 0, 1, 0);     // Sets "adxl.setEveryInterruptMapping(single tap, double tap, free fall, activity, inactivity);" 
                                                         // Accepts only 1 or 2 values for pins INT1 and INT2. This chooses the pin on the ADXL345 to use for Interrupts.
                                                         // This library may have a problem using INT2 pin. Default to INT1 pin.
   
   // Turn on Interrupts for each mode (1 == ON, 0 == OFF)
   adxl.InactivityINT(0);
-  adxl.ActivityINT(0);
+  adxl.ActivityINT(1);
   adxl.FreeFallINT(0);
   adxl.doubleTapINT(0);
-  adxl.singleTapINT(1);
+  adxl.singleTapINT(0);
 
-  pinMode(ADXL345_INTERRUPT_PIN, OUTPUT);
-  attachInterrupt(digitalPinToInterrupt(ADXL345_INTERRUPT_PIN), adxlIsr, FALLING);   // Attach Interrupt  
+  //pinMode(ADXL345_INTERRUPT_PIN, OUTPUT);
+  pinMode(ADXL345_INTERRUPT_MAN_PIN, INPUT);
+  //attachInterrupt(digitalPinToInterrupt(ADXL345_INTERRUPT_PIN), adxlIsr, FALLING);   // Attach Interrupt  
+  attachInterrupt(digitalPinToInterrupt(ADXL345_INTERRUPT_MAN_PIN), adxlManIsr, RISING);   // Attach Interrupt  
 
 }
 
@@ -310,7 +328,8 @@ void readFile(fs::FS &fs, const char * path){
     }
 
     Serial.println("- read from file:");
-    while(file.available()){
+    while(file.available()){  
+        delay(1);
         Serial.write(file.read());
     }
 }
@@ -326,6 +345,7 @@ void readFileBT(fs::FS &fs, const char * path){
 
     SerialBT.println("- read from file:");
     while(file.available()){
+        delay(1);
         SerialBT.write(file.read());
     }
 }
@@ -348,18 +368,23 @@ void writeFile(fs::FS &fs, const char * path, const char * message){
 
 // Append data to existing file
 void appendFile(fs::FS &fs, const char * path, const char * message){
+    detachInterrupt(digitalPinToInterrupt(PUSH_BUTTON_INTERRUPT_PIN));
+    detachInterrupt(digitalPinToInterrupt(ADXL345_INTERRUPT_MAN_PIN));
+    
     Serial.printf("Appending to file: %s\r\n", path);
 
     File file = fs.open(path, FILE_APPEND);
     if(!file){
-        Serial.println("- failed to open file for appending");
+        //Serial.println("- failed to open file for appending");
         return;
     }
     if(file.print(message)){
-        Serial.println("- message appended");
+        //Serial.println("- message appended");
     } else {
-        Serial.println("- append failed");
+        //Serial.println("- append failed");
     }
+    attachInterrupt(digitalPinToInterrupt(PUSH_BUTTON_INTERRUPT_PIN), pushButtonIsr, FALLING);   // Attach Interrupt 
+    attachInterrupt(digitalPinToInterrupt(ADXL345_INTERRUPT_MAN_PIN), adxlManIsr, RISING);
 }
 
 // Rename a file
@@ -383,21 +408,43 @@ void deleteFile(fs::FS &fs, const char * path){
 }
 
 // Write angle measurements to log file
-void writeAngleToFile(float rollAngle, float pitchAngle) {
-  char measChar[8];
+void writeAngleToFile(float rollAngle, float pitchAngle, int violentEventFlag, int upsideDownFlag) {
+  char measChar[32];
 
   detachInterrupt(digitalPinToInterrupt(PUSH_BUTTON_INTERRUPT_PIN));
+  detachInterrupt(digitalPinToInterrupt(ADXL345_INTERRUPT_MAN_PIN));
 
+  appendFile(SPIFFS, "/log.txt", DEVICE_ID);
+  appendFile(SPIFFS, "/log.txt", ",");
+  appendFile(SPIFFS, "/log.txt", DEVICE_MODEL);
+  appendFile(SPIFFS, "/log.txt", ",");
   appendFile(SPIFFS, "/log.txt", t);
   appendFile(SPIFFS, "/log.txt", ",");
+
+  if (violentEventFlag == 0)
+    appendFile(SPIFFS, "/log.txt", "0");
+  else if (violentEventFlag == 1)
+    appendFile(SPIFFS, "/log.txt", "1");
+  appendFile(SPIFFS, "/log.txt", ",");
+  
   dtostrf(rollAngle, 3, 2, measChar);
   appendFile(SPIFFS, "/log.txt", measChar);
   appendFile(SPIFFS, "/log.txt", ",");
   dtostrf(pitchAngle, 3, 2, measChar);
   appendFile(SPIFFS, "/log.txt", measChar);
+  appendFile(SPIFFS, "/log.txt", ",");
+
+  if (upsideDownFlag == 0)
+    appendFile(SPIFFS, "/log.txt", "0");
+  else if (upsideDownFlag == 1)
+    appendFile(SPIFFS, "/log.txt", "1");
+  appendFile(SPIFFS, "/log.txt", ",");
+
+  appendFile(SPIFFS, "/log.txt", SW_VERSION);
   appendFile(SPIFFS, "/log.txt", "\r\n");
 
   attachInterrupt(digitalPinToInterrupt(PUSH_BUTTON_INTERRUPT_PIN), pushButtonIsr, FALLING);   // Attach Interrupt 
+  attachInterrupt(digitalPinToInterrupt(ADXL345_INTERRUPT_MAN_PIN), adxlManIsr, RISING);
 }
 
 // Read temp./hum. from DHT22 sensor
@@ -720,11 +767,48 @@ void setup() {
 
 void loop() {
   unsigned long statusLedCurrentMillis = 0;
-
+  float pitchAngle, rollAngle;
+  int xAccel, yAccel, zAccel;
+  int upsideDownFlag;
+  int violentEventFlag;
+  
   if (eepromWriteFlag) {
       shortDoubleBlink();
       saveState();
       eepromWriteFlag = false;
+  }
+
+
+  if (adxlIsrFlag) {
+    adxlIsrFlag = false;
+    Serial.println("adxlManIsr");
+    adxl.readAccel(&xAccel, &yAccel, &zAccel);
+    float xAccelF, yAccelF, zAccelF;
+    xAccelF = ((float)xAccel / 15.9) * 9.8;
+    yAccelF = ((float)yAccel / 15.9) * 9.8;
+    zAccelF = ((float)zAccel / 15.9) * 9.8;
+    Serial.println(xAccelF);
+    Serial.println(yAccelF);
+    Serial.println(zAccelF);
+
+    // Calculate roll angle
+    rollAngle = calculateRollAngle(xAccel, yAccel, zAccel);  
+    Serial.print(rollAngle);
+    Serial.print("/");
+  
+    // Calculate pitch angle
+    pitchAngle = calculatePitchAngle(xAccel, yAccel, zAccel);  
+    Serial.println(pitchAngle);
+
+    violentEventFlag = 1;
+    
+    if (zAccel < 0)
+      upsideDownFlag = 1;
+    else if (zAccel >= 0)
+      upsideDownFlag = 0;
+  
+    writeAngleToFile(rollAngle, pitchAngle, violentEventFlag, upsideDownFlag);  
+    adxlIsr();
   }
 
   if (flagReadBatteryFlag) {
@@ -745,8 +829,8 @@ void loop() {
   if (ST_DATA_MEAS == true) {
   
     // put your main code here, to run repeatedly:
-    int xAccel, yAccel, zAccel;
-    float pitchAngle, rollAngle;
+    
+    
     // Time value to be used for delay 
     unsigned long measCurrentMillis = 0;
     
@@ -786,7 +870,12 @@ void loop() {
       Serial.println(pitchAngle);
   
       Serial.println(zAccel);
-  
+      if (zAccel < 0)
+        upsideDownFlag = 1;
+      else if (zAccel >= 0)
+        upsideDownFlag = 0;
+
+      violentEventFlag = 0;
       adxlIsr();
 
       DateTime now = rtc.now();
@@ -794,7 +883,7 @@ void loop() {
       sprintf(t, "%02d-%02d-%02d %02d:%02d:%02d",  now.day(), now.month(), now.year(), now.hour(), now.minute(), now.second());
   
       // Write measurements to file
-      writeAngleToFile(rollAngle, pitchAngle);  
+      writeAngleToFile(rollAngle, pitchAngle, violentEventFlag, upsideDownFlag);  
 
       readTempHum();
 
