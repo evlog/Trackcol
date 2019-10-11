@@ -34,6 +34,7 @@ int ADXL345_INTERRUPT_PIN = 4;
 int LED_STATUS_PIN = 23;   
 int PUSH_BUTTON_INTERRUPT_PIN = 0;        
 RTC_DATA_ATTR int bootCount = 0;
+hw_timer_t * timer = NULL;            // create a hardware timer 
 
 BluetoothSerial SerialBT;
 ADXL345 adxl = ADXL345();             // USE FOR I2C COMMUNICATION
@@ -103,7 +104,11 @@ void pushButtonIsr () {
     Serial.print("ST_DATA_MEAS: ");
     Serial.println(ST_DATA_MEAS);
 
-  //  if (ST_DATA_MEAS ==  true) {
+//  if (ST_DATA_MEAS ==  true) 
+ //   setLedTimer(3000000);
+ // else if (ST_DATA_MEAS ==  false) 
+//    setLedTimer(10000000);
+  
   //    delay(1000);
   //    last_interrupt_time = interrupt_time;
    //   loop();
@@ -112,6 +117,24 @@ void pushButtonIsr () {
   }
   last_interrupt_time = interrupt_time;  
 
+}
+
+void ledTimerIsr(){
+      Serial.println("ledTimerIsr");
+      //blinkLed();
+
+}
+
+void blinkLed (uint32_t blinkDelay) {
+  unsigned long statusLedCurrentMillis;
+  
+  statusLedCurrentMillis = millis();
+  if ((statusLedCurrentMillis - statusLedPreviousMillis) >= blinkDelay) {    
+    digitalWrite(LED_STATUS_PIN, HIGH);   
+    delay(50); 
+    digitalWrite(LED_STATUS_PIN, LOW);    
+    statusLedPreviousMillis = statusLedCurrentMillis;      
+  }
 }
 
  void callback(esp_spp_cb_event_t event, esp_spp_cb_param_t *param){
@@ -472,11 +495,71 @@ void parseBtCommand(String btMessage) {
     Serial.println("*****");
     SerialBT.println("*****");
   }
+
+  else if (btMessage.indexOf("COMM_GET_TIME_DATE") >= 0) {
+    char tt[32];
+    Serial.println("*****");
+    SerialBT.println("*****");
+    Serial.println("COMM_GET_TIME_DATE");
+    SerialBT.println("COMM_GET_TIME_DATE");
+    
+    DateTime now = rtc.now();
+    sprintf(tt, "%02d-%02d-%02d %02d:%02d:%02d",  now.day(), now.month(), now.year(), now.hour(), now.minute(), now.second());
+
+    SerialBT.println(tt);
+    Serial.println(tt);   
+
+    Serial.println("COMM_GET_TIME_DATE: OK");
+    SerialBT.println("COMM_GET_TIME_DATE: OK");
+    Serial.println("*****");
+    SerialBT.println("*****");
+    Serial.println("*****");
+    SerialBT.println("*****");
+  }
+}
+
+
+void initSetLedTimer () {
+  Serial.println("initSetLedTimer");
+  /* Use 1st timer of 4 */
+  /* 1 tick take 1/(80MHZ/80) = 1us so we set divider 80 and count up */
+  timer = timerBegin(0, 80, true);
+
+  /* Attach onTimer function to our timer */
+  timerAttachInterrupt(timer, &ledTimerIsr, true);
+
+  /* Set alarm to call onTimer function every second 1 tick is 1us
+  => 1 second is 1000000us */
+  /* Repeat the alarm (third parameter) */
+  timerAlarmWrite(timer, 3000000, true);
+
+  /* Start an alarm */
+  timerAlarmEnable(timer);
+}
+
+void setLedTimer(uint32_t delay) { 
+  Serial.println("setLedTimer");
+
+  timer = timerBegin(0, 80, true);
+
+  /* Attach onTimer function to our timer */
+  timerAttachInterrupt(timer, &ledTimerIsr, true);
+
+  /* Set alarm to call onTimer function every second 1 tick is 1us
+  => 1 second is 1000000us */
+  /* Repeat the alarm (third parameter) */
+  timerAlarmWrite(timer, delay, true);
+
+  /* Start an alarm */
+  timerAlarmEnable(timer);
+
 }
 
 
 void btInit() {
-  digitalWrite(LED_STATUS_PIN, HIGH);
+  unsigned long statusLedCurrentMillis;
+  //digitalWrite(LED_STATUS_PIN, HIGH);
+  
   while(1) {
     if(ST_DATA_MEAS == true)
       break;
@@ -486,6 +569,10 @@ void btInit() {
       SerialBT.println("Trackcol A device. Ready to receive commands...");
       break;
     }
+    
+    blinkLed(10000);
+        
+    
   }
     
   while(1) {
@@ -493,6 +580,9 @@ void btInit() {
       break;
     if (SerialBT.available())
       readBtCommand();
+
+    blinkLed(10000);
+        
   }
 }
 
@@ -518,6 +608,7 @@ void setup() {
   }
 
   pinMode(LED_STATUS_PIN, OUTPUT); 
+  //initSetLedTimer();
   
 
   // Set pushbutton interrupt
@@ -558,6 +649,7 @@ void setup() {
 }
 
 void loop() {
+  unsigned long statusLedCurrentMillis = 0;
 
   if (ST_DATA_MEAS == true) {
   
@@ -566,10 +658,14 @@ void loop() {
     float pitchAngle, rollAngle;
     // Time value to be used for delay 
     unsigned long measCurrentMillis = 0;
-    unsigned long statusLedCurrentMillis = 0;
-  
-    digitalWrite(LED_STATUS_PIN, LOW);
     
+  
+
+    //digitalWrite(LED_STATUS_PIN, HIGH); 
+
+    blinkLed(3000);
+
+    /*
     statusLedCurrentMillis = millis();
     if ((statusLedCurrentMillis - statusLedPreviousMillis) >= 3000) {    
       digitalWrite(LED_STATUS_PIN, HIGH);   
@@ -577,7 +673,8 @@ void loop() {
       digitalWrite(LED_STATUS_PIN, LOW);    
       statusLedPreviousMillis = statusLedCurrentMillis;
         
-    }
+    }*/
+
    
      //Increment boot number and print it every reboot
     //++bootCount;
