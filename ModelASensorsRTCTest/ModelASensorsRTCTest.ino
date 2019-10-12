@@ -15,6 +15,8 @@
 #include "SPIFFS.h"                   // File system library
 #include "BluetoothSerial.h"          // Bluetooth library
 #include <RTClib.h>                   // RTC library
+#include <EEPROM.h>                   // EEPROM library
+#include "DHTesp.h"                   
 
 #if !defined(CONFIG_BT_ENABLED) || !defined(CONFIG_BLUEDROID_ENABLED)
 #error Bluetooth is not enabled! Please run `make menuconfig` to and enable it
@@ -26,12 +28,15 @@
 //-----------------------------
 #define FORMAT_SPIFFS_IF_FAILED true
 #define uS_TO_S_FACTOR 1000000  /* Conversion factor for micro seconds to seconds */
-#define TIME_TO_SLEEP  10        /* Time ESP32 will go to sleep (in seconds) */
-
+#define TIME_TO_SLEEP  10       /* Time ESP32 will go to sleep (in seconds) */
+#define EEPROM_SIZE 2           // define the number of bytes you want to access
 boolean ST_DATA_MEAS = false;
 
+boolean eepromWriteFlag = false;
+
 int ADXL345_INTERRUPT_PIN = 4;   
-int LED_STATUS_PIN = 23;   
+int LED_STATUS_PIN = 23;  
+int DHT22_GPIO_PIN = 15;
 int PUSH_BUTTON_INTERRUPT_PIN = 0;        
 RTC_DATA_ATTR int bootCount = 0;
 hw_timer_t * timer = NULL;            // create a hardware timer 
@@ -39,6 +44,7 @@ hw_timer_t * timer = NULL;            // create a hardware timer
 BluetoothSerial SerialBT;
 ADXL345 adxl = ADXL345();             // USE FOR I2C COMMUNICATION
 RTC_DS3231 rtc;                       // RTC object
+DHTesp dht;                           // DHT sensor
 
 
 
@@ -98,7 +104,7 @@ void pushButtonIsr () {
 
   detachInterrupt(digitalPinToInterrupt(PUSH_BUTTON_INTERRUPT_PIN));
 
-  shortDoubleBlink();
+  
 
   // If interrupts come faster than 200ms, assume it's a bounce and ignore
   if (interrupt_time - last_interrupt_time > 200)
@@ -121,8 +127,25 @@ void pushButtonIsr () {
   }
   last_interrupt_time = interrupt_time; 
 
+  eepromWriteFlag = true;
+
   attachInterrupt(digitalPinToInterrupt(PUSH_BUTTON_INTERRUPT_PIN), pushButtonIsr, FALLING);   // Attach Interrupt 
 
+}
+
+void saveState() {
+  // Save STATE value to EEPROM
+  //---
+  if (ST_DATA_MEAS == false) {
+    EEPROM.write(0, 0);
+    EEPROM.commit();
+  }
+  else if (ST_DATA_MEAS == true) {
+    EEPROM.write(0, 1);
+    EEPROM.commit();    
+  }
+  //---
+  //---
 }
 
 void ledTimerIsr(){
@@ -133,11 +156,11 @@ void ledTimerIsr(){
 
 void shortDoubleBlink() {
   digitalWrite(LED_STATUS_PIN, HIGH);   
-  delay(500); 
+  delay(100); 
   digitalWrite(LED_STATUS_PIN, LOW);
   delay(500); 
   digitalWrite(LED_STATUS_PIN, HIGH);   
-  delay(500); 
+  delay(100); 
   digitalWrite(LED_STATUS_PIN, LOW);
 }
 
@@ -370,6 +393,21 @@ void writeAngleToFile(float rollAngle, float pitchAngle) {
   attachInterrupt(digitalPinToInterrupt(PUSH_BUTTON_INTERRUPT_PIN), pushButtonIsr, FALLING);   // Attach Interrupt 
 }
 
+// Read temp./hum. from DHT22 sensor
+void readTempHum(void) {
+
+  float h = dht.getHumidity();
+  // Read temperature as Celsius (the default)
+  float t = dht.getTemperature();
+  // Check if any reads failed and exit early (to try again).
+  Serial.print("Temperature: ");
+  Serial.println(t);
+
+  Serial.print("Humidity: ");
+  Serial.println(h);
+
+
+}
 void readBtCommand() {
 
   String btMessage = "";
@@ -613,6 +651,7 @@ void setup() {
 
 
   uint8_t filExistsFlag;
+  byte eepromState;
   
   // put your setup code here, to run once:
   Serial.begin(9600);                 // Start the serial terminal
@@ -627,6 +666,24 @@ void setup() {
     return;
   }
 
+  // initialize EEPROM with predefined size
+  //---
+  EEPROM.begin(EEPROM_SIZE);
+
+  eepromState = EEPROM.read(0);
+
+  if (eepromState == 0)
+    ST_DATA_MEAS = false;
+  else if (eepromState == 1)
+    ST_DATA_MEAS = true;
+  else
+    ST_DATA_MEAS = false;
+
+  Serial.print("ST_DATA_MEAS:");
+  Serial.print(ST_DATA_MEAS);
+  //---
+  //---
+
   pinMode(LED_STATUS_PIN, OUTPUT); 
   //initSetLedTimer();
   
@@ -637,6 +694,9 @@ void setup() {
    
   // Initialize the ADXL345 sensor 
   adxl345Config();
+
+  // Configure DHT22 pin and sensor type
+  dht.setup(15, DHTesp::DHT22);
 
   // Set our ESP32 to wake up every TIME_TO_SLEEP * uS_TO_S_FACTOR seconds
   esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
@@ -661,15 +721,17 @@ void setup() {
   //rtc.adjust(DateTime(2019, 10, 07, 22, 40, 0));
     
   Serial.println( "Test complete" );
-
-    
-
-
-  
+ 
 }
 
 void loop() {
   unsigned long statusLedCurrentMillis = 0;
+
+  if (eepromWriteFlag) {
+      shortDoubleBlink();
+      saveState();
+      eepromWriteFlag = false;
+  }
 
   if (ST_DATA_MEAS == true) {
   
@@ -724,6 +786,8 @@ void loop() {
   
       // Write measurements to file
       writeAngleToFile(rollAngle, pitchAngle);  
+
+      readTempHum();
 
       //---
   
