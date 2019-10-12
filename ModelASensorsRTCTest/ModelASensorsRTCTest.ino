@@ -95,7 +95,11 @@ void adxlIsr() {
 void pushButtonIsr () {
   static unsigned long last_interrupt_time = 0;
   unsigned long interrupt_time = millis();
-  
+
+  detachInterrupt(digitalPinToInterrupt(PUSH_BUTTON_INTERRUPT_PIN));
+
+  shortDoubleBlink();
+
   // If interrupts come faster than 200ms, assume it's a bounce and ignore
   if (interrupt_time - last_interrupt_time > 200)
   {
@@ -115,7 +119,9 @@ void pushButtonIsr () {
     //}
 
   }
-  last_interrupt_time = interrupt_time;  
+  last_interrupt_time = interrupt_time; 
+
+  attachInterrupt(digitalPinToInterrupt(PUSH_BUTTON_INTERRUPT_PIN), pushButtonIsr, FALLING);   // Attach Interrupt 
 
 }
 
@@ -123,6 +129,16 @@ void ledTimerIsr(){
       Serial.println("ledTimerIsr");
       //blinkLed();
 
+}
+
+void shortDoubleBlink() {
+  digitalWrite(LED_STATUS_PIN, HIGH);   
+  delay(500); 
+  digitalWrite(LED_STATUS_PIN, LOW);
+  delay(500); 
+  digitalWrite(LED_STATUS_PIN, HIGH);   
+  delay(500); 
+  digitalWrite(LED_STATUS_PIN, LOW);
 }
 
 void blinkLed (uint32_t blinkDelay) {
@@ -340,6 +356,8 @@ void deleteFile(fs::FS &fs, const char * path){
 void writeAngleToFile(float rollAngle, float pitchAngle) {
   char measChar[8];
 
+  detachInterrupt(digitalPinToInterrupt(PUSH_BUTTON_INTERRUPT_PIN));
+
   appendFile(SPIFFS, "/log.txt", t);
   appendFile(SPIFFS, "/log.txt", ",");
   dtostrf(rollAngle, 3, 2, measChar);
@@ -348,6 +366,8 @@ void writeAngleToFile(float rollAngle, float pitchAngle) {
   dtostrf(pitchAngle, 3, 2, measChar);
   appendFile(SPIFFS, "/log.txt", measChar);
   appendFile(SPIFFS, "/log.txt", "\r\n");
+
+  attachInterrupt(digitalPinToInterrupt(PUSH_BUTTON_INTERRUPT_PIN), pushButtonIsr, FALLING);   // Attach Interrupt 
 }
 
 void readBtCommand() {
