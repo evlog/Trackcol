@@ -31,12 +31,18 @@
 #define TIME_TO_SLEEP  10       /* Time ESP32 will go to sleep (in seconds) */
 #define EEPROM_SIZE 2           // define the number of bytes you want to access
 boolean ST_DATA_MEAS = false;
+boolean flagReadBatteryFlag = false;
+int batteryVoltage;
 
 boolean eepromWriteFlag = false;
 
 int ADXL345_INTERRUPT_PIN = 4;   
 int LED_STATUS_PIN = 23;  
-int DHT22_GPIO_PIN = 15;
+int DHT22_GPIO_PIN = 2;
+int BATTERY_LED_PIN_2 = 19;
+int BATTERY_LED_PIN_1 = 18;
+int BATTERY_LED_PIN_0 = 5;
+int BATTERY_VOLTAGE_PIN = 35;
 int PUSH_BUTTON_INTERRUPT_PIN = 0;        
 RTC_DATA_ATTR int bootCount = 0;
 hw_timer_t * timer = NULL;            // create a hardware timer 
@@ -148,8 +154,9 @@ void saveState() {
   //---
 }
 
-void ledTimerIsr(){
-      Serial.println("ledTimerIsr");
+void readBatteryIsr(){
+      Serial.println("readBatteryIsr");
+      flagReadBatteryFlag = true;
       //blinkLed();
 
 }
@@ -584,7 +591,7 @@ void initSetLedTimer () {
   timer = timerBegin(0, 80, true);
 
   /* Attach onTimer function to our timer */
-  timerAttachInterrupt(timer, &ledTimerIsr, true);
+  timerAttachInterrupt(timer, &readBatteryIsr, true);
 
   /* Set alarm to call onTimer function every second 1 tick is 1us
   => 1 second is 1000000us */
@@ -595,23 +602,7 @@ void initSetLedTimer () {
   timerAlarmEnable(timer);
 }
 
-void setLedTimer(uint32_t delay) { 
-  Serial.println("setLedTimer");
 
-  timer = timerBegin(0, 80, true);
-
-  /* Attach onTimer function to our timer */
-  timerAttachInterrupt(timer, &ledTimerIsr, true);
-
-  /* Set alarm to call onTimer function every second 1 tick is 1us
-  => 1 second is 1000000us */
-  /* Repeat the alarm (third parameter) */
-  timerAlarmWrite(timer, delay, true);
-
-  /* Start an alarm */
-  timerAlarmEnable(timer);
-
-}
 
 
 void btInit() {
@@ -684,8 +675,11 @@ void setup() {
   //---
   //---
 
+  pinMode(BATTERY_LED_PIN_2, OUTPUT);
+  pinMode(BATTERY_LED_PIN_1, OUTPUT);
+  pinMode(BATTERY_LED_PIN_0, OUTPUT);
   pinMode(LED_STATUS_PIN, OUTPUT); 
-  //initSetLedTimer();
+  initSetLedTimer();
   
 
   // Set pushbutton interrupt
@@ -696,7 +690,7 @@ void setup() {
   adxl345Config();
 
   // Configure DHT22 pin and sensor type
-  dht.setup(15, DHTesp::DHT22);
+  dht.setup(2, DHTesp::DHT22);
 
   // Set our ESP32 to wake up every TIME_TO_SLEEP * uS_TO_S_FACTOR seconds
   esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
@@ -731,6 +725,21 @@ void loop() {
       shortDoubleBlink();
       saveState();
       eepromWriteFlag = false;
+  }
+
+  if (flagReadBatteryFlag) {
+    flagReadBatteryFlag = false;
+    batteryVoltage = analogRead(BATTERY_VOLTAGE_PIN);
+    Serial.print("Battery voltage: ");
+    Serial.println(batteryVoltage);
+    digitalWrite(BATTERY_LED_PIN_0, HIGH);
+    digitalWrite(BATTERY_LED_PIN_1, HIGH);
+    digitalWrite(BATTERY_LED_PIN_2, HIGH);
+    delay(500);
+    digitalWrite(BATTERY_LED_PIN_0, LOW);
+    digitalWrite(BATTERY_LED_PIN_1, LOW);
+    digitalWrite(BATTERY_LED_PIN_2, LOW);
+    
   }
 
   if (ST_DATA_MEAS == true) {
