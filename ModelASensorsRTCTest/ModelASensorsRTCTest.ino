@@ -122,6 +122,8 @@ void pushButtonIsr () {
   static unsigned long last_interrupt_time = 0;
   unsigned long interrupt_time = millis();
 
+  eepromWriteFlag = true;
+
   detachInterrupt(digitalPinToInterrupt(PUSH_BUTTON_INTERRUPT_PIN));
   detachInterrupt(digitalPinToInterrupt(ADXL345_INTERRUPT_MAN_PIN));
 
@@ -148,7 +150,8 @@ void pushButtonIsr () {
   }
   last_interrupt_time = interrupt_time; 
 
-  eepromWriteFlag = true;
+  
+
 
   attachInterrupt(digitalPinToInterrupt(PUSH_BUTTON_INTERRUPT_PIN), pushButtonIsr, FALLING);   // Attach Interrupt 
   attachInterrupt(digitalPinToInterrupt(ADXL345_INTERRUPT_MAN_PIN), adxlManIsr, RISING);
@@ -158,6 +161,9 @@ void pushButtonIsr () {
 void saveState() {
   // Save STATE value to EEPROM
   //---
+
+  Serial.println("Save state");
+  
   if (ST_DATA_MEAS == false) {
     EEPROM.write(0, 0);
     EEPROM.commit();
@@ -371,9 +377,10 @@ void appendFile(fs::FS &fs, const char * path, const char * message){
     detachInterrupt(digitalPinToInterrupt(PUSH_BUTTON_INTERRUPT_PIN));
     detachInterrupt(digitalPinToInterrupt(ADXL345_INTERRUPT_MAN_PIN));
     
-    Serial.printf("Appending to file: %s\r\n", path);
-
+    //Serial.printf("Appending to file: %s\r\n", path);
+    delay(1);
     File file = fs.open(path, FILE_APPEND);
+    delay(1);
     if(!file){
         //Serial.println("- failed to open file for appending");
         return;
@@ -383,6 +390,7 @@ void appendFile(fs::FS &fs, const char * path, const char * message){
     } else {
         //Serial.println("- append failed");
     }
+    delay(1);
     attachInterrupt(digitalPinToInterrupt(PUSH_BUTTON_INTERRUPT_PIN), pushButtonIsr, FALLING);   // Attach Interrupt 
     attachInterrupt(digitalPinToInterrupt(ADXL345_INTERRUPT_MAN_PIN), adxlManIsr, RISING);
 }
@@ -772,11 +780,7 @@ void loop() {
   int upsideDownFlag;
   int violentEventFlag;
   
-  if (eepromWriteFlag) {
-      shortDoubleBlink();
-      saveState();
-      eepromWriteFlag = false;
-  }
+
 
 
   if (adxlIsrFlag) {
@@ -806,6 +810,11 @@ void loop() {
       upsideDownFlag = 1;
     else if (zAccel >= 0)
       upsideDownFlag = 0;
+
+
+    DateTime now = rtc.now();
+
+    sprintf(t, "%02d-%02d-%02d %02d:%02d:%02d",  now.day(), now.month(), now.year(), now.hour(), now.minute(), now.second());
   
     writeAngleToFile(rollAngle, pitchAngle, violentEventFlag, upsideDownFlag);  
     adxlIsr();
@@ -908,6 +917,12 @@ void loop() {
   
     //delay(10000);
     //esp_deep_sleep_start();
+  }
+
+  if (eepromWriteFlag) {
+      //shortDoubleBlink();
+      saveState();
+      eepromWriteFlag = false;
   }
 
   if (ST_DATA_MEAS ==  false) {
