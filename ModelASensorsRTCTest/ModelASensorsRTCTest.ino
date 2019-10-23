@@ -9,7 +9,7 @@
 
 // Define libraries
 //-----------------------------
-#include <SparkFun_ADXL345.h>         // SparkFun ADXL345 Library
+#include <SparkFun_ADXL345.h>         // SparkFun ADXL345 Library 
 //#include <ADXL345.h>         // SparkFun ADXL345 Library
 #include "FS.h"                       // File system library
 #include "SPIFFS.h"                   // File system library
@@ -236,7 +236,7 @@ void adxl345Config() {
  
   // Set values for what is considered FREE FALL (0-255)
   adxl.setFreeFallThreshold(100);       // (5 - 9) recommended - 62.5mg per increment
-  adxl.setFreeFallDuration(30);       // (20 - 70) recommended - 5ms per increment
+  adxl.setFreeFallDuration(30);       // (20 - 70) recommended - 5ms per incremen
  
   // Setting all interupts to take place on INT1 pin
   adxl.setImportantInterruptMapping(0, 0, 0, 1, 0);     // Sets "adxl.setEveryInterruptMapping(single tap, double tap, free fall, activity, inactivity);" 
