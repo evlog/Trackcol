@@ -121,12 +121,13 @@ void IRAM_ATTR pushButtonIsr () {
   detachInterrupt(digitalPinToInterrupt(PUSH_BUTTON_INTERRUPT_PIN));
   //detachInterrupt(digitalPinToInterrupt(ADXL345_INTERRUPT_MAN_PIN));
 
-  
+  delay(1);
 
   // If interrupts come faster than 200ms, assume it's a bounce and ignore
-  if (interrupt_time - last_interrupt_time > 200)
+  if (interrupt_time - last_interrupt_time > 500)
   {
-    //Serial.println("Button pushed");
+    delay(1);
+    //Serial.println("Button pushed");G
     ST_DATA_MEAS = !ST_DATA_MEAS;
     //Serial.print("ST_DATA_MEAS: ");
     //Serial.println(ST_DATA_MEAS);
@@ -145,7 +146,7 @@ void IRAM_ATTR pushButtonIsr () {
   last_interrupt_time = interrupt_time; 
 
   
-
+  delay(1);
 
   attachInterrupt(digitalPinToInterrupt(PUSH_BUTTON_INTERRUPT_PIN), pushButtonIsr, FALLING);   // Attach Interrupt 
   //attachInterrupt(digitalPinToInterrupt(ADXL345_INTERRUPT_MAN_PIN), adxlManIsr, RISING);
@@ -338,7 +339,8 @@ void readFile(fs::FS &fs, const char * path){
 
     Serial.println("- read from file:");
     while(file.available()){  
-        delay(1);
+        delayMicroseconds(1);
+        //delay(1);
         Serial.write(file.read());
     }
 }
@@ -354,7 +356,8 @@ void readFileBT(fs::FS &fs, const char * path){
 
     SerialBT.println("- read from file:");
     while(file.available()){
-        delay(1);
+        delayMicroseconds(1);
+        //delay(1);
         SerialBT.write(file.read());
     }
 }
@@ -768,6 +771,7 @@ void setup() {
 
   // Set our ESP32 to wake up every TIME_TO_SLEEP * uS_TO_S_FACTOR seconds
   esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
+  
 
   // Check if log.txt exists and if not create it
   // ---
