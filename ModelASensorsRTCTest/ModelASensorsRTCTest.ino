@@ -43,7 +43,7 @@ boolean eepromWriteFlag = false;
 int ADXL345_INTERRUPT_PIN = 4;  
 int ADXL345_INTERRUPT_MAN_PIN = 16;    
 int LED_STATUS_PIN = 23;  
-int DHT22_GPIO_PIN = 2;
+int DHT22_GPIO_PIN = 15;
 int BATTERY_LED_PIN_2 = 19;
 int BATTERY_LED_PIN_1 = 18;
 int BATTERY_LED_PIN_0 = 5;
@@ -66,12 +66,13 @@ unsigned long statusLedPreviousMillis = 0;
 // Real time char value
 char t[32];
 
+
 //-----------------------------
 
 //Auxiliary Functions
 //-----------------------------
 // Look for ADXL345 interrupts and Triggered Action 
-void adxlIsr() {
+void IRAM_ATTR adxlIsr() {
   
   // getInterruptSource clears all triggered actions after returning value
   // Do not call again until you need to recheck for triggered actions
@@ -108,34 +109,27 @@ void adxlIsr() {
   } 
 }
 
-void adxlManIsr () {
-  detachInterrupt(digitalPinToInterrupt(PUSH_BUTTON_INTERRUPT_PIN));
-  detachInterrupt(digitalPinToInterrupt(ADXL345_INTERRUPT_MAN_PIN));
-  adxlIsrFlag = true;
-  Serial.println("adxlManIsr");
-  attachInterrupt(digitalPinToInterrupt(PUSH_BUTTON_INTERRUPT_PIN), pushButtonIsr, FALLING);   // Attach Interrupt 
-  attachInterrupt(digitalPinToInterrupt(ADXL345_INTERRUPT_MAN_PIN), adxlManIsr, RISING);
-}
+
 
 // Interrupt service routine to detect push button changes
-void pushButtonIsr () {
+void IRAM_ATTR pushButtonIsr () {
   static unsigned long last_interrupt_time = 0;
   unsigned long interrupt_time = millis();
 
   eepromWriteFlag = true;
 
   detachInterrupt(digitalPinToInterrupt(PUSH_BUTTON_INTERRUPT_PIN));
-  detachInterrupt(digitalPinToInterrupt(ADXL345_INTERRUPT_MAN_PIN));
+  //detachInterrupt(digitalPinToInterrupt(ADXL345_INTERRUPT_MAN_PIN));
 
   
 
   // If interrupts come faster than 200ms, assume it's a bounce and ignore
   if (interrupt_time - last_interrupt_time > 200)
   {
-    Serial.println("Button pushed");
+    //Serial.println("Button pushed");
     ST_DATA_MEAS = !ST_DATA_MEAS;
-    Serial.print("ST_DATA_MEAS: ");
-    Serial.println(ST_DATA_MEAS);
+    //Serial.print("ST_DATA_MEAS: ");
+    //Serial.println(ST_DATA_MEAS);
 
 //  if (ST_DATA_MEAS ==  true) 
  //   setLedTimer(3000000);
@@ -154,8 +148,17 @@ void pushButtonIsr () {
 
 
   attachInterrupt(digitalPinToInterrupt(PUSH_BUTTON_INTERRUPT_PIN), pushButtonIsr, FALLING);   // Attach Interrupt 
-  attachInterrupt(digitalPinToInterrupt(ADXL345_INTERRUPT_MAN_PIN), adxlManIsr, RISING);
+  //attachInterrupt(digitalPinToInterrupt(ADXL345_INTERRUPT_MAN_PIN), adxlManIsr, RISING);
 
+}
+
+void IRAM_ATTR adxlManIsr () {
+  //detachInterrupt(digitalPinToInterrupt(PUSH_BUTTON_INTERRUPT_PIN));
+  detachInterrupt(digitalPinToInterrupt(ADXL345_INTERRUPT_MAN_PIN));
+  adxlIsrFlag = true;
+  //Serial.println("adxlManIsr");
+  //attachInterrupt(digitalPinToInterrupt(PUSH_BUTTON_INTERRUPT_PIN), pushButtonIsr, FALLING);   // Attach Interrupt 
+  attachInterrupt(digitalPinToInterrupt(ADXL345_INTERRUPT_MAN_PIN), adxlManIsr, RISING);
 }
 
 void saveState() {
@@ -176,8 +179,8 @@ void saveState() {
   //---
 }
 
-void readBatteryIsr(){
-      Serial.println("readBatteryIsr");
+void IRAM_ATTR readBatteryIsr(){
+      //Serial.println("readBatteryIsr");
       flagReadBatteryFlag = true;
       //blinkLed();
 
@@ -216,7 +219,7 @@ void blinkLed (uint32_t blinkDelay) {
 void adxl345Config() {
   adxl.powerOn();                     // Power on the ADXL345
 
-  adxl.setRangeSetting(16);           // Give the range settings
+  adxl.setRangeSetting(4);           // Give the range settings
                                       // Accepted values are 2g, 4g, 8g or 16g
                                       // Higher Values = Wider Measurement Range
                                       // Lower Values = Greater Sensitivity
@@ -416,7 +419,7 @@ void deleteFile(fs::FS &fs, const char * path){
 }
 
 // Write angle measurements to log file
-void writeAngleToFile(float rollAngle, float pitchAngle, int violentEventFlag, int upsideDownFlag) {
+void writeAngleToFile(float temp, float hum, float rollAngle, float pitchAngle, int violentEventFlag, int upsideDownFlag) {
   char measChar[32];
 
   detachInterrupt(digitalPinToInterrupt(PUSH_BUTTON_INTERRUPT_PIN));
@@ -427,6 +430,14 @@ void writeAngleToFile(float rollAngle, float pitchAngle, int violentEventFlag, i
   appendFile(SPIFFS, "/log.txt", DEVICE_MODEL);
   appendFile(SPIFFS, "/log.txt", ",");
   appendFile(SPIFFS, "/log.txt", t);
+  appendFile(SPIFFS, "/log.txt", ",");
+
+  dtostrf(temp, 3, 2, measChar);
+  appendFile(SPIFFS, "/log.txt", measChar);
+  appendFile(SPIFFS, "/log.txt", ",");
+
+  dtostrf(hum, 3, 2, measChar);
+  appendFile(SPIFFS, "/log.txt", measChar);
   appendFile(SPIFFS, "/log.txt", ",");
 
   if (violentEventFlag == 0)
@@ -455,19 +466,27 @@ void writeAngleToFile(float rollAngle, float pitchAngle, int violentEventFlag, i
   attachInterrupt(digitalPinToInterrupt(ADXL345_INTERRUPT_MAN_PIN), adxlManIsr, RISING);
 }
 
-// Read temp./hum. from DHT22 sensor
-void readTempHum(void) {
+struct dhtData {
+  float temp;
+  float hum;
+};
 
-  float h = dht.getHumidity();
+// Read temp./hum. from DHT22 sensor
+struct dhtData readTempHum(void) {
+
+  struct dhtData dhtStruct; 
+
+  dhtStruct.hum = dht.getHumidity();
   // Read temperature as Celsius (the default)
-  float t = dht.getTemperature();
+  dhtStruct.temp = dht.getTemperature();
   // Check if any reads failed and exit early (to try again).
   Serial.print("Temperature: ");
-  Serial.println(t);
+  Serial.println(dhtStruct.temp);
 
   Serial.print("Humidity: ");
-  Serial.println(h);
+  Serial.println(dhtStruct.hum);
 
+  return dhtStruct;
 
 }
 void readBtCommand() {
@@ -745,7 +764,7 @@ void setup() {
   adxl345Config();
 
   // Configure DHT22 pin and sensor type
-  dht.setup(2, DHTesp::DHT22);
+  dht.setup(DHT22_GPIO_PIN, DHTesp::DHT22);
 
   // Set our ESP32 to wake up every TIME_TO_SLEEP * uS_TO_S_FACTOR seconds
   esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
@@ -779,6 +798,7 @@ void loop() {
   int xAccel, yAccel, zAccel;
   int upsideDownFlag;
   int violentEventFlag;
+  dhtData dhtStruct;
   
 
 
@@ -788,12 +808,16 @@ void loop() {
     Serial.println("adxlManIsr");
     adxl.readAccel(&xAccel, &yAccel, &zAccel);
     float xAccelF, yAccelF, zAccelF;
+    int accX, accY, accZ;
+
+
     xAccelF = ((float)xAccel / 15.9) * 9.8;
     yAccelF = ((float)yAccel / 15.9) * 9.8;
     zAccelF = ((float)zAccel / 15.9) * 9.8;
-    Serial.println(xAccelF);
-    Serial.println(yAccelF);
-    Serial.println(zAccelF);
+    Serial.println(xAccel);
+    Serial.println(yAccel);
+    Serial.println(zAccel);    
+
 
     // Calculate roll angle
     rollAngle = calculateRollAngle(xAccel, yAccel, zAccel);  
@@ -804,7 +828,10 @@ void loop() {
     pitchAngle = calculatePitchAngle(xAccel, yAccel, zAccel);  
     Serial.println(pitchAngle);
 
-    violentEventFlag = 1;
+    if ((abs(xAccel) > 200) | (abs(yAccel) > 200) | (abs(zAccel) > 200)) {
+      violentEventFlag = 1;
+      Serial.println("@@@@@@@@@@Violent@@@@@@@@@@@@");
+    }
     
     if (zAccel < 0)
       upsideDownFlag = 1;
@@ -815,8 +842,11 @@ void loop() {
     DateTime now = rtc.now();
 
     sprintf(t, "%02d-%02d-%02d %02d:%02d:%02d",  now.day(), now.month(), now.year(), now.hour(), now.minute(), now.second());
+
+    dhtStruct = readTempHum();
   
-    writeAngleToFile(rollAngle, pitchAngle, violentEventFlag, upsideDownFlag);  
+    writeAngleToFile(dhtStruct.temp, dhtStruct.hum, rollAngle, pitchAngle, violentEventFlag, upsideDownFlag);  
+    
     adxlIsr();
   }
 
@@ -890,11 +920,13 @@ void loop() {
       DateTime now = rtc.now();
 
       sprintf(t, "%02d-%02d-%02d %02d:%02d:%02d",  now.day(), now.month(), now.year(), now.hour(), now.minute(), now.second());
+
+      dhtStruct = readTempHum();
   
       // Write measurements to file
-      writeAngleToFile(rollAngle, pitchAngle, violentEventFlag, upsideDownFlag);  
+      writeAngleToFile(dhtStruct.temp, dhtStruct.hum, rollAngle, pitchAngle, violentEventFlag, upsideDownFlag);  
 
-      readTempHum();
+      
 
       //---
   
