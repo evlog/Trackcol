@@ -9,6 +9,8 @@ char pass[] = "spartan3";
 void setup()
 {
 
+
+
    Serial.begin(9600);
   
   WiFi.begin(ssid, pass);
@@ -27,33 +29,51 @@ void setup()
 }
 
 void loop () {
-  long rssi0 = WiFi.RSSI();
-  delay(20);
 
-  long rssi1 = WiFi.RSSI();
-  delay(20);
+  // Reconnect to WiFi if not connected
+  //------
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.print("Reconnecting to WiFi...\n");
+    WiFi.begin(ssid, pass);
+  }
 
-  long rssi2 = WiFi.RSSI();
-  delay(20);
+  while (WiFi.status() != WL_CONNECTED) {
+    Serial.print(".");
+    delay(500);
+  }
+  //------
+  //------
 
-  long rssi3 = WiFi.RSSI();
-  delay(20);
-
-  long rssi4 = WiFi.RSSI();
-  delay(20);
-
-  long rssi5 = WiFi.RSSI();
-  delay(20);
-
-  long rssi6 = WiFi.RSSI();
-  delay(20);
-
-
-  long rssi = (rssi0 + rssi1 + rssi2 + rssi3 + rssi4 + rssi5 + rssi6) / 7;
-
-  Serial.println(rssi);
-
-  delay(3000);
+  if (WiFi.status() == WL_CONNECTED) {
+  
+    long rssi0 = WiFi.RSSI();
+    delay(20);
+  
+    long rssi1 = WiFi.RSSI();
+    delay(20);
+  
+    long rssi2 = WiFi.RSSI();
+    delay(20);
+  
+    long rssi3 = WiFi.RSSI();
+    delay(20);
+  
+    long rssi4 = WiFi.RSSI();
+    delay(20);
+  
+    long rssi5 = WiFi.RSSI();
+    delay(20);
+  
+    long rssi6 = WiFi.RSSI();
+    delay(20);
+  
+  
+    long rssi = (rssi0 + rssi1 + rssi2 + rssi3 + rssi4 + rssi5 + rssi6) / 7;
+  
+    Serial.println(rssi);
+  
+    delay(3000);
+  }
 
   
   
