@@ -2,29 +2,59 @@
 #include <WiFi.h>
 
 //SSID of your network
-char ssid[] = "Takis2";
+char ssid[] = "Redmi";
 //password of your WPA Network
-char pass[] = "Makris33";
+char pass[] = "spartan3";
 
 void setup()
 {
 
    Serial.begin(9600);
   
- WiFi.begin(ssid, pass);
- Serial.print("Hi");
+  WiFi.begin(ssid, pass);
+  Serial.print("Wait for WiFi...");
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
 
-  if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("Couldn't get a wifi connection");
-    while(true);
-  }
-  // if you are connected, print out info about the connection:
-  else {
-   // print the received signal strength:
-  long rssi = WiFi.RSSI();
-  Serial.print("RSSI:");
-  Serial.println(rssi);
-  }
+
+  Serial.println(WiFi.localIP());
+
+
+
+  
 }
 
-void loop () {}
+void loop () {
+  long rssi0 = WiFi.RSSI();
+  delay(20);
+
+  long rssi1 = WiFi.RSSI();
+  delay(20);
+
+  long rssi2 = WiFi.RSSI();
+  delay(20);
+
+  long rssi3 = WiFi.RSSI();
+  delay(20);
+
+  long rssi4 = WiFi.RSSI();
+  delay(20);
+
+  long rssi5 = WiFi.RSSI();
+  delay(20);
+
+  long rssi6 = WiFi.RSSI();
+  delay(20);
+
+
+  long rssi = (rssi0 + rssi1 + rssi2 + rssi3 + rssi4 + rssi5 + rssi6) / 7;
+
+  Serial.println(rssi);
+
+  delay(3000);
+
+  
+  
+}
