@@ -30,6 +30,13 @@ void setup()
 
 void loop () {
 
+  int num_of_points = 20;
+  int i;
+  long rssi = 0;
+  long rssi_av = 0;
+
+
+
   // Reconnect to WiFi if not connected
   //------
   if (WiFi.status() != WL_CONNECTED) {
@@ -46,33 +53,21 @@ void loop () {
 
   if (WiFi.status() == WL_CONNECTED) {
   
-    long rssi0 = WiFi.RSSI();
-    delay(20);
+    for (i = 0; i < num_of_points;i++) {
+      rssi = rssi + WiFi.RSSI();
+      delay(10);
+    }
   
-    long rssi1 = WiFi.RSSI();
-    delay(20);
+    rssi_av = rssi / num_of_points;
+
+    Serial.print("RSSI:");
+    Serial.println(rssi_av);
+
+    Serial.print("Distance:");
+    float d = pow(10, (-50 - rssi_av) / 20.0);
+    Serial.println(d);
   
-    long rssi2 = WiFi.RSSI();
-    delay(20);
-  
-    long rssi3 = WiFi.RSSI();
-    delay(20);
-  
-    long rssi4 = WiFi.RSSI();
-    delay(20);
-  
-    long rssi5 = WiFi.RSSI();
-    delay(20);
-  
-    long rssi6 = WiFi.RSSI();
-    delay(20);
-  
-  
-    long rssi = (rssi0 + rssi1 + rssi2 + rssi3 + rssi4 + rssi5 + rssi6) / 7;
-  
-    Serial.println(rssi);
-  
-    delay(3000);
+    //delay(3000);
   }
 
   
