@@ -8,6 +8,10 @@
 #define SCREEN_WIDTH 128
 #define SCREEN_HEIGHT 64
 
+int freq = 2000;
+int channel = 0;
+int resolution = 8;
+
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, -1);
 
 //SSID of your network
@@ -21,6 +25,9 @@ void setup()
 
 
    Serial.begin(9600);
+
+  ledcSetup(channel, freq, resolution);
+  ledcAttachPin(15, channel);
   
   WiFi.begin(ssid, pass);
   Serial.print("Wait for WiFi...");
@@ -48,6 +55,9 @@ display.setTextSize(2);
 display.setTextColor(WHITE);
 display.setCursor(0,28);
 
+//ledcWrite(channel, 255);
+//ledcWriteTone(channel, 200);
+//ledcWrite(channel, 125);
   
 }
 
@@ -59,6 +69,24 @@ void loop () {
   long rssi_av = 0;
 
 
+  /*ledcWriteTone(channel, 2000);
+  for (int dutyCycle = 0; dutyCycle <= 255; dutyCycle=dutyCycle+10){
+  
+    Serial.println(dutyCycle);
+  
+    ledcWrite(channel, dutyCycle);
+    delay(1000);
+  }
+  
+ ledcWrite(channel, 125);
+  
+  for (int freq = 255; freq < 10000; freq = freq + 250){
+  
+     Serial.println(freq);
+  
+     ledcWriteTone(channel, freq);
+     delay(1000);
+  }*/
 
   // Reconnect to WiFi if not connected
   //------
@@ -85,6 +113,9 @@ void loop () {
 
     Serial.print("RSSI:");
     Serial.println(rssi_av);
+
+    ledcWrite(channel, 255);
+    ledcWriteTone(channel, rssi_av * (-3));
 
     Serial.print("Distance:");
     float d = pow(10, (-50 - rssi_av) / 20.0);
