@@ -63,7 +63,7 @@ display.setCursor(0,28);
 
 void loop () {
 
-  int num_of_points = 300;
+  int num_of_points = 200;
   int i;
   long rssi = 0;
   long rssi_av = 0;
@@ -106,7 +106,7 @@ void loop () {
   
     for (i = 0; i < num_of_points;i++) {
       rssi = rssi + WiFi.RSSI();
-      delay(5);
+      delay(1);
     }
   
     rssi_av = rssi / num_of_points;
@@ -114,8 +114,39 @@ void loop () {
     Serial.print("RSSI:");
     Serial.println(rssi_av);
 
-    ledcWrite(channel, 255);
-    ledcWriteTone(channel, rssi_av * (-3));
+    ledcWrite(channel, 250);
+
+    rssi_av = rssi_av * (-1);
+
+    if (rssi_av < 25)
+      ledcWriteTone(channel, 3000);
+
+    else if ((rssi_av > 25) & (rssi_av < 30))
+      ledcWriteTone(channel, 2800);
+
+    else if ((rssi_av > 30) & (rssi_av < 35))
+      ledcWriteTone(channel, 2500);
+
+    else if ((rssi_av > 35) & (rssi_av < 40))
+      ledcWriteTone(channel, 1500);
+
+    else if ((rssi_av > 40) & (rssi_av < 45))
+      ledcWriteTone(channel, 1000);
+
+    else if ((rssi_av > 45) & (rssi_av < 50))
+      ledcWriteTone(channel, 600);
+
+    else if ((rssi_av > 50) & (rssi_av < 55))
+      ledcWriteTone(channel, 300);
+
+    else if ((rssi_av > 55) & (rssi_av < 60))
+      ledcWriteTone(channel, 100);
+      
+    else if ((rssi_av > 60))
+      ledcWriteTone(channel, 1);
+
+
+    Serial.println((2500 - (rssi_av*rssi_av*rssi_av)/(-128)));
 
     Serial.print("Distance:");
     float d = pow(10, (-50 - rssi_av) / 20.0);
@@ -127,7 +158,7 @@ void loop () {
     display.println(rssi_av);
     display.display();
   
-    delay(1);
+    //delay(1);
   }
 
   
