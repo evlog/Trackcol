@@ -216,7 +216,9 @@ void loop() {
 
     // Set the characteristic's value to be the array of bytes that is actually a string
     String timeSinceBoot = "Time since boot: " + String(millis()/1000);
-    pRXCharacteristic->writeValue(timeSinceBoot.c_str(), timeSinceBoot.length());
+    String comm = "3A115DD7E93500000000";
+    Serial.println(comm.c_str());
+    pTXCharacteristic->writeValue(comm.c_str(), comm.length());
   }
 
   delay(5000); // Delay five seconds between loops.
